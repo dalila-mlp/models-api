@@ -1,8 +1,22 @@
 import numpy as np
-from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, confusion_matrix,
-                             roc_auc_score, roc_curve, precision_recall_curve, average_precision_score,
-                             log_loss, jaccard_score, cohen_kappa_score, matthews_corrcoef)
+
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix,
+    roc_auc_score,
+    roc_curve,
+    precision_recall_curve,
+    average_precision_score,
+    log_loss,
+    jaccard_score,
+    cohen_kappa_score,
+    matthews_corrcoef,
+)
 from tensorflow.keras.losses import CategoricalCrossentropy
+
 
 class ModelTrainer_Tf:
     def __init__(self, classifier):
@@ -15,12 +29,11 @@ class ModelTrainer_Tf:
             self.classifier.train(x_train, y_train, epochs=epochs, batch_size=batch_size)
 
     def evaluate(self, x_test, y_test):
-        y_pred = self.classifier.predict(x_test)
-        y_pred_classes = np.argmax(y_pred, axis=1)
+        y_pred_classes = np.argmax(self.classifier.predict(x_test), axis=1)
         y_pred_proba = np.eye(y_test.shape[1])[y_pred_classes]
         y_test_classes = np.argmax(y_test, axis=1)
 
-        metrics = {
+        return {
             'accuracy': accuracy_score(y_test_classes, y_pred_classes),
             'precision': precision_score(y_test_classes, y_pred_classes, average='weighted'),
             'recall': recall_score(y_test_classes, y_pred_classes, average='weighted'),
@@ -34,8 +47,7 @@ class ModelTrainer_Tf:
             'cohen_kappa': cohen_kappa_score(y_test_classes, y_pred_classes),
             'matthews_corrcoef': matthews_corrcoef(y_test_classes, y_pred_classes)
         }
-        # Log charts
-        self.log_charts(y_test, y_pred_proba)
+
 
 class ModelTrainer_Sk:
     def __init__(self, classifier):
@@ -46,8 +58,8 @@ class ModelTrainer_Sk:
 
     def evaluate(self, x_test, y_test):
         y_pred = self.classifier.predict(x_test)
-        y_pred_proba = self.classifier.model.predict_proba(x_test) if hasattr(self.classifier.model, "predict_proba") else None  # Ensure to call predict_proba on the internal model
-
+        # Ensure to call predict_proba on the internal model
+        y_pred_proba = self.classifier.model.predict_proba(x_test) if hasattr(self.classifier.model, "predict_proba") else None
         y_test_classes = y_test if len(y_test.shape) == 1 else np.argmax(y_test, axis=1)
         y_pred_classes = y_pred if len(y_pred.shape) == 1 else np.argmax(y_pred, axis=1)
 
@@ -79,6 +91,7 @@ class ModelTrainer_Sk:
         import joblib
         self.classifier = joblib.load(filename)
 
+
 class ModelTrainer_other:
     def __init__(self, classifier):
         self.classifier = classifier
@@ -96,7 +109,7 @@ class ModelTrainer_other:
         y_pred_proba = np.eye(3)[y_pred_classes]
         y_test_classes = np.argmax(y_test, axis=1)
 
-        metrics = {
+        return {
             'accuracy': accuracy_score(y_test_classes, y_pred_classes),
             'precision': precision_score(y_test_classes, y_pred_classes, average='weighted'),
             'recall': recall_score(y_test_classes, y_pred_classes, average='weighted'),
@@ -108,14 +121,10 @@ class ModelTrainer_other:
             'categorical_crossentropy': CategoricalCrossentropy()(y_test, y_pred_proba).numpy(),
             'jaccard_index': jaccard_score(y_test_classes, y_pred_classes, average='weighted'),
             'cohen_kappa': cohen_kappa_score(y_test_classes, y_pred_classes),
-            'matthews_corrcoef': matthews_corrcoef(y_test_classes, y_pred_classes)
+            'matthews_corrcoef': matthews_corrcoef(y_test_classes, y_pred_classes),
+            'roc_curve': roc_curve(y_test.ravel(), y_pred_proba.ravel()),
+            'precision_recall_curve': precision_recall_curve(y_test.ravel(), y_pred_proba.ravel()),
         }
-
-        # Calcul des courbes ROC et PR
-        metrics['roc_curve'] = roc_curve(y_test.ravel(), y_pred_proba.ravel())
-        metrics['precision_recall_curve'] = precision_recall_curve(y_test.ravel(), y_pred_proba.ravel())
-
-        return metrics
 
     def save_model(self, filename):
         self.classifier.save(filename)
