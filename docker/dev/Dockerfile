@@ -16,6 +16,9 @@ RUN pip install --upgrade pip && \
         matplotlib \
         numpy \
         uuid \
+        polars \
+        pyarrow \
+        pandas \
     && pip install -e .
 
 EXPOSE 14506

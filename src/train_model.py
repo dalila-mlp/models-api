@@ -14,8 +14,12 @@ from src.model_trainer import ModelTrainer_Tf, ModelTrainer_Sk, ModelTrainer_oth
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
 from src.classeAbstraite import DynamicParams
-import argparse
+import polars as pl
+import pyarrow
 import uuid
+from pathlib import Path
+
+ap = Path(__file__).parent.parent.resolve()
 
 """def get_model_class(module_name, class_name):
     module = importlib.import_module(module_name)
@@ -45,15 +49,35 @@ def convert_numpy_to_list(metrics):
 def plot_and_log_metrics(metrics):
     plot_ids = []
     for metric, values in metrics.items():
+        if isinstance(values, np.ndarray) and values.ndim > 1:
+            # For matrices or high-dimensional data, we skip or handle separately
+            print(f"Skipping plotting for {metric} due to incompatible dimensions.")
+            continue
+        
         plt.figure(figsize=(10, 6))
 
-        if isinstance(values, list) or isinstance(values, np.ndarray):
-            epochs = range(len(values))
-            plt.plot(epochs, values, label=f'{metric} over epochs')
-        else:
+        # Check if values are scalar or list/array-like
+        if np.isscalar(values):
+            # Plot scalar values as horizontal lines
             plt.plot([0, 1], [values, values], label=f'{metric} (constant)')
+            plt.xlabel('Index')
+        elif isinstance(values, (list, np.ndarray)):
+            # Check dimensions and plot accordingly
+            values = np.array(values)
+            if values.ndim == 1:
+                epochs = range(len(values))
+                plt.plot(epochs, values, label=f'{metric} over epochs')
+            elif values.ndim == 2:
+                for i in range(values.shape[1]):
+                    epochs = range(values.shape[0])
+                    plt.plot(epochs, values[:, i], label=f'{metric} series {i}')
+            else:
+                print(f"Skipping {metric} due to unsupported number of dimensions: {values.ndim}")
+                continue
+        else:
+            print(f"Unhandled data type for metric {metric}: {type(values)}")
+            continue
 
-        plt.xlabel('Epoch' if isinstance(values, list) else 'Index')
         plt.ylabel(metric)
         plt.title(f'{metric.capitalize()} Metric')
         plt.legend()
@@ -61,11 +85,11 @@ def plot_and_log_metrics(metrics):
 
         plot_id = str(uuid.uuid4())
         plot_filename = f"{plot_id}.png"
-        plt.savefig(plot_filename)
+        plt.savefig(f"{ap}/charts/{plot_filename}")
         plt.close()
 
         plot_ids.append(plot_id)
-    
+
     return plot_ids
 
 def load_model_class(temp_script_path):
@@ -82,15 +106,22 @@ def load_model_class(temp_script_path):
             return cls
     return None
 
-def main(temp_script_path, test_size):
+def main(temp_script_path, dataset_temp_path, target_column,features, test_size):
 
-    from sklearn.datasets import load_iris
-    data = load_iris()
-    x = data.data
-    y = data.target
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=42)
-    y_train_tf = to_categorical(y_train, 3)
-    y_test_tf = to_categorical(y_test, 3)
+    # Step 1: Load the dataset with Polars
+    df = pl.read_parquet(dataset_temp_path)
+    
+    # Assuming 'target' is your label column and it's the last column
+    x = df[features]
+    y = df.select(target_column).to_numpy().flatten()  # Converting to NumPy for compatibility with sklearn
+
+    # Step 2: Split the data using sklearn (Polars can be used if the entire workflow stays in Polars)
+    x_train, x_test, y_train, y_test = train_test_split(x.to_pandas(), y, test_size=test_size, random_state=42)
+    
+    y = y.astype(int)
+    num_classes = np.max(y) + 1
+    y_train_tf = to_categorical(y_train, num_classes=num_classes)
+    y_test_tf = to_categorical(y_test, num_classes=num_classes)
 
     params = DynamicParams()
 
@@ -111,17 +142,9 @@ def main(temp_script_path, test_size):
         trainer = ModelTrainer_other(model_instance)
 
     trainer.train(x_train, y_train)
-    metrics = trainer.evaluate(x_test, y_test)
+    metrics = trainer.evaluate(x_test, y_test, num_classes)
     metrics = convert_numpy_to_list(metrics)
 
     plot_ids = plot_and_log_metrics(metrics)
 
     return plot_ids, metrics
-
-if __name__ == "__main__":
-    # parser = argparse.ArgumentParser(description='Train a model and log results.')
-    # parser.add_argument('temp_script_path', type=str, help='Path to the temporary model script')
-    # parser.add_argument('test_size', type=float, help='Test size for train-test split')
-    # parser.add_argument('transaction_id', type=str, help='Transaction ID')
-    # args = parser.parse_args()
-    main("/home/sofianne/dev/pa/dalila/models-api/src/models_draft/classification_models/Sk_DecisionTreeClassifier_Dalila.py",0.1)
