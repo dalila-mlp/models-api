@@ -82,19 +82,22 @@ def fetch_model_save(model_id: str, github_token: str, model_type: str) -> str:
 
 def fetch_dataset(dataset_id: str, github_token: str) -> str:
     """Fetch the dataset file from GitHub based on the dataset ID."""
+
     url = f"https://api.github.com/repos/dalila-mlp/datafiles/contents/{dataset_id}.csv"
     headers = {"Authorization": f"token {github_token}"}
     response = requests.get(url, headers=headers)
     print(response)
+
     if response.status_code == 200:
         content = base64.b64decode(response.json()['content'])
         temp_dataset_path = f'{ap}/dataset/temp_{dataset_id}.csv'
+
         with open(temp_dataset_path, 'wb') as file:
             file.write(content)
+
         return temp_dataset_path
     else:
         raise HTTPException(status_code=response.status_code, detail="Dataset file not found on GitHub")
-
 
 
 def dynamic_import(script_content, test_size, model_id, dataset_content, target_column,features, github_token):
