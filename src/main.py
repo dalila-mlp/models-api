@@ -3,6 +3,8 @@ import os
 from typing import List
 import numpy as np
 import requests
+import json
+import uuid
 
 from pathlib import Path
 
@@ -35,6 +37,12 @@ class TrainRequest(BaseModel):
     features : List[str]
     test_size: float
 
+class PredictRequest(BaseModel):
+    model_id: str
+    datafile_id: str
+    features: List[str]
+    model_type: str
+
 
 def get_github_token() -> str:
     """ Retrieve GitHub token from environment variables."""
@@ -53,16 +61,34 @@ def fetch_model_script(model_id: str, github_token: str) -> str:
 
     raise HTTPException(status_code=response.status_code, detail="Model file not found on GitHub")
 
+def fetch_model_save(model_id: str, github_token: str, model_type: str) -> str:
+    """ Fetch the model script from GitHub based on the model ID."""
+    if model_type == 'Tf':
+        if ((response := requests.get(
+            f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{model_id}",
+            headers={"Authorization": f"token {github_token}"},
+        )).status_code == 200):
+            return base64.b64decode(response.json()['content'])
+    else :
+        if ((response := requests.get(
+            f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{model_id}.pkl",
+            headers={"Authorization": f"token {github_token}"},
+        )).status_code == 200):
+            return base64.b64decode(response.json()['content'])
+
+    raise HTTPException(status_code=response.status_code, detail="Model file not found on GitHub")
+
+
 
 def fetch_dataset(dataset_id: str, github_token: str) -> str:
     """Fetch the dataset file from GitHub based on the dataset ID."""
-    url = f"https://api.github.com/repos/dalila-mlp/datafiles/contents/{dataset_id}.parquet"
+    url = f"https://api.github.com/repos/dalila-mlp/datafiles/contents/{dataset_id}.csv"
     headers = {"Authorization": f"token {github_token}"}
     response = requests.get(url, headers=headers)
     print(response)
     if response.status_code == 200:
         content = base64.b64decode(response.json()['content'])
-        temp_dataset_path = f'{ap}/dataset/temp_{dataset_id}.parquet'
+        temp_dataset_path = f'{ap}/dataset/temp_{dataset_id}.csv'
         with open(temp_dataset_path, 'wb') as file:
             file.write(content)
         return temp_dataset_path
@@ -78,22 +104,39 @@ def dynamic_import(script_content, test_size, model_id, dataset_content, target_
     temp_script_path = f'{ap}/models/temp_{model_id}.py'
     with open(temp_script_path, 'w') as file:
         file.write(script_content)
+    save_model_path = f'{ap}/models/{model_id}.pkl'
 
     # Execute the training process
-    plot_ids, metrics = main(temp_script_path, dataset_content, target_column,features, test_size)
+    plot_ids, metrics, model_type = main("train",temp_script_path, dataset_content, target_column,features, test_size, model_id)
 
     # Upload plots to GitHub
     for plot_id in plot_ids:
         plot_filename = f"{plot_id}.png"
         upload_plot_to_github(plot_filename, github_token)
+    model_save_id = upload_model_to_github(model_id, model_type, github_token)
 
     # Clean up: Remove the temporary script file and plot files
     os.remove(temp_script_path)
     for plot_id in plot_ids:
         plot_filename = f"{ap}/charts/{plot_id}.png"
         os.remove(plot_filename)
+    os.remove(save_model_path)
 
-    return plot_ids, metrics
+    return plot_ids, metrics, model_save_id
+
+def dynamic_import_predict(script_content, model_id, dataset_content,features, github_token):
+    """ Dynamically import and execute training from the fetched script. """
+    # Save the fetched script content to a temporary Python file
+    temp_script_path = f'{ap}/models/temp_{model_id}'
+    with open(temp_script_path, 'wb') as file:
+        file.write(script_content)
+    # Execute the training process
+    result = main("predict",temp_script_path, dataset_content, None, features, None, model_id)
+
+    # # Clean up: Remove the temporary script file and plot files
+    os.remove(temp_script_path)
+
+    return result
 
 def upload_plot_to_github(plot_filename, github_token):
     """ Upload the plot file to a GitHub repository. """
@@ -109,6 +152,40 @@ def upload_plot_to_github(plot_filename, github_token):
     response = requests.put(url, headers=headers, json=data)
     if response.status_code not in (201, 200):
         raise HTTPException(status_code=response.status_code, detail="Failed to upload plot to GitHub")
+
+def upload_model_to_github(model_id, model_type, github_token):
+    """ Upload the model file to a GitHub repository. """
+    
+    file_name = f'{uuid.uuid4()}'
+    try:
+        if model_type == 'Tf':
+            file_path = f"{ap}/models/{model_id}"
+            url = f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{file_name}"
+        else:
+            file_path = f"{ap}/models/{model_id}.pkl"
+            url = f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{file_name}.pkl"
+        
+        with open(file_path, 'rb') as file:
+            content = base64.b64encode(file.read()).decode('utf-8')
+        
+        headers = {"Authorization": f"token {github_token}"}
+        data = {
+            "message": f"Add model {file_name}",
+            "content": content
+        }
+        
+        response = requests.put(url, headers=headers, json=data)
+        response.raise_for_status()  # This will raise an HTTPError if the HTTP request returned an unsuccessful status code
+        
+        if response.status_code in (201, 200):
+            print(f"Successfully uploaded {model_id} to GitHub.")
+        else:
+            print(f"Failed to upload {model_id} to GitHub. Status code: {response.status_code}")
+        return file_name
+    except FileNotFoundError:
+        raise Exception(f"File {file_path} not found.")
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Failed to upload model to GitHub: {e}")
 
 def convert_numpy(obj):
     if isinstance(obj, np.generic):
@@ -129,16 +206,36 @@ def train_model(request: TrainRequest, github_token: str = Depends(get_github_to
     try:
         script_content = fetch_model_script(request.model_id, github_token)
         dataset_temp_path = fetch_dataset(request.datafile_id, github_token)
-        plot_ids, metrics = dynamic_import(script_content, request.test_size, request.model_id, dataset_temp_path, request.target_column, request.features, github_token)
+        plot_ids, metrics, model_save_id = dynamic_import(script_content, request.test_size, request.model_id, dataset_temp_path, request.target_column, request.features, github_token)
         
         #remove the dataset temp file
-        os.remove(f"{ap}/dataset/temp_{request.datafile_id}.parquet")
+        os.remove(f"{ap}/dataset/temp_{request.datafile_id}.csv")
         
         # Convert all numpy data types to native Python types for JSON serialization
         metrics = convert_numpy(metrics)
         return {
             "metrics": metrics,
-            "plot_id_list": plot_ids
+            "plot_id_list": plot_ids,
+            "model_save_id": model_save_id
         }
+    except HTTPException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    
+@app.post("/predict")
+def predict_model(request: PredictRequest, github_token: str = Depends(get_github_token)):
+    if not github_token:
+        raise HTTPException(status_code=500, detail="GitHub token not configured")
+
+    try:
+        script_content = fetch_model_save(request.model_id, github_token, request.model_type)
+        dataset_temp_path = fetch_dataset(request.datafile_id, github_token)
+        result = dynamic_import_predict(script_content, request.model_id, dataset_temp_path, request.features, github_token)
+        result = json.dumps(result, indent=2)
+        #remove the dataset temp file
+        os.remove(f"{ap}/dataset/temp_{request.datafile_id}.csv")
+        
+        # Convert all numpy data types to native Python types for JSON serialization
+        # metrics = convert_numpy(metrics)
+        return result
     except HTTPException as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)

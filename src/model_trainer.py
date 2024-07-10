@@ -128,8 +128,9 @@ class ModelTrainer_Sk:
         return metrics
 
 
-    def save_model(self):
-        self.classifier.save()
+    def save_model(self, model_id):
+        file_name = f'models/{model_id}.pkl'
+        self.classifier.save(file_name)
 
     def load_model(self, filename):
         self.classifier.load(filename)

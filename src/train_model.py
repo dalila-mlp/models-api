@@ -3,6 +3,7 @@ import importlib
 import sys
 import os
 import inspect
+import pickle
 
 # Add the current directory and the 'models' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -106,45 +107,75 @@ def load_model_class(temp_script_path):
             return cls
     return None
 
-def main(temp_script_path, dataset_temp_path, target_column,features, test_size):
+def main(type, temp_script_path, dataset_temp_path, target_column, features, test_size, model_id):
+    if type == 'train':
 
-    # Step 1: Load the dataset with Polars
-    df = pl.read_parquet(dataset_temp_path)
-    
-    # Assuming 'target' is your label column and it's the last column
-    x = df[features]
-    y = df.select(target_column).to_numpy().flatten()  # Converting to NumPy for compatibility with sklearn
+        # Step 1: Load the dataset with Polars
+        df = pl.read_csv(dataset_temp_path)
+        
+        # Assuming 'target' is your label column and it's the last column
+        x = df[features]
+        y = df.select(target_column).to_numpy().flatten()  # Converting to NumPy for compatibility with sklearn
 
-    # Step 2: Split the data using sklearn (Polars can be used if the entire workflow stays in Polars)
-    x_train, x_test, y_train, y_test = train_test_split(x.to_pandas(), y, test_size=test_size, random_state=42)
-    
-    y = y.astype(int)
-    num_classes = np.max(y) + 1
-    y_train_tf = to_categorical(y_train, num_classes=num_classes)
-    y_test_tf = to_categorical(y_test, num_classes=num_classes)
+        # Step 2: Split the data using sklearn (Polars can be used if the entire workflow stays in Polars)
+        x_train, x_test, y_train, y_test = train_test_split(x.to_pandas(), y, test_size=test_size, random_state=42)
+        
+        y = y.astype(int)
+        num_classes = np.max(y) + 1
+        y_train_tf = to_categorical(y_train, num_classes=num_classes)
+        y_test_tf = to_categorical(y_test, num_classes=num_classes)
 
-    params = DynamicParams()
+        params = DynamicParams()
 
-    model_class = load_model_class(temp_script_path)
-    model_instance = model_class(params)
+        model_class = load_model_class(temp_script_path)
+        model_instance = model_class(params)
 
-    model_type = determine_model_type_from_imports(temp_script_path)
+        model_type = determine_model_type_from_imports(temp_script_path)
 
-    if model_type == "Tf":
-        trainer = ModelTrainer_Tf(model_instance)
-        y_train = y_train_tf
-        y_test = y_test_tf
-    elif model_type == "Sk":
-        trainer = ModelTrainer_Sk(model_instance)
-        y_train = y_train_tf
-        y_test = y_test_tf
-    else:
-        trainer = ModelTrainer_other(model_instance)
+        if model_type == "Tf":
+            trainer = ModelTrainer_Tf(model_instance)
+            y_train = y_train_tf
+            y_test = y_test_tf
+        elif model_type == "Sk":
+            trainer = ModelTrainer_Sk(model_instance)
+            y_train = y_train_tf
+            y_test = y_test_tf
+        else:
+            trainer = ModelTrainer_other(model_instance)
 
-    trainer.train(x_train, y_train)
-    metrics = trainer.evaluate(x_test, y_test, num_classes)
-    metrics = convert_numpy_to_list(metrics)
+        trainer.train(x_train, y_train)
+        trainer.save_model(model_id)
+        metrics = trainer.evaluate(x_test, y_test, num_classes)
+        metrics = convert_numpy_to_list(metrics)
 
-    plot_ids = plot_and_log_metrics(metrics)
+        plot_ids = plot_and_log_metrics(metrics)
 
-    return plot_ids, metrics
+        return plot_ids, metrics, model_type
+    else :
+
+        # Step 1: Load the dataset with Polars
+        df = pl.read_csv(dataset_temp_path)
+        
+        # Assuming 'target' is your label column and it's the last column
+        x = df[features]
+        
+        with open(temp_script_path, 'rb') as file:
+            model = pickle.load(file)
+        result = model.predict(x)
+
+            # Convertir x_train en DataFrame polars
+        if isinstance(x, pl.DataFrame):
+            x_df = x
+        else:
+            x_df = pl.DataFrame(x)
+
+        # Convertir les résultats en DataFrame polars
+        result_df = pl.DataFrame({'prediction': result})
+
+        # Combiner x_train avec les prédictions
+        combined_df = x_df.hstack(result_df)
+
+        # Convertir le DataFrame polars en une liste de dictionnaires
+        result_json_serializable = combined_df.to_dicts()
+
+        return result_json_serializable
