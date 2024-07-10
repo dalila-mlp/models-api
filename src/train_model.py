@@ -107,9 +107,8 @@ def load_model_class(temp_script_path):
     return None
 
 def main(temp_script_path, dataset_temp_path, target_column,features, test_size):
-
     # Step 1: Load the dataset with Polars
-    df = pl.read_parquet(dataset_temp_path)
+    df = pl.read_csv(dataset_temp_path)
     
     # Assuming 'target' is your label column and it's the last column
     x = df[features]
@@ -117,17 +116,13 @@ def main(temp_script_path, dataset_temp_path, target_column,features, test_size)
 
     # Step 2: Split the data using sklearn (Polars can be used if the entire workflow stays in Polars)
     x_train, x_test, y_train, y_test = train_test_split(x.to_pandas(), y, test_size=test_size, random_state=42)
-    
     y = y.astype(int)
     num_classes = np.max(y) + 1
     y_train_tf = to_categorical(y_train, num_classes=num_classes)
     y_test_tf = to_categorical(y_test, num_classes=num_classes)
-
     params = DynamicParams()
-
     model_class = load_model_class(temp_script_path)
     model_instance = model_class(params)
-
     model_type = determine_model_type_from_imports(temp_script_path)
 
     if model_type == "Tf":
@@ -144,7 +139,6 @@ def main(temp_script_path, dataset_temp_path, target_column,features, test_size)
     trainer.train(x_train, y_train)
     metrics = trainer.evaluate(x_test, y_test, num_classes)
     metrics = convert_numpy_to_list(metrics)
-
     plot_ids = plot_and_log_metrics(metrics)
 
     return plot_ids, metrics

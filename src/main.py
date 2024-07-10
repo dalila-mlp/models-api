@@ -56,19 +56,22 @@ def fetch_model_script(model_id: str, github_token: str) -> str:
 
 def fetch_dataset(dataset_id: str, github_token: str) -> str:
     """Fetch the dataset file from GitHub based on the dataset ID."""
-    url = f"https://api.github.com/repos/dalila-mlp/datafiles/contents/{dataset_id}.parquet"
+
+    url = f"https://api.github.com/repos/dalila-mlp/datafiles/contents/{dataset_id}.csv"
     headers = {"Authorization": f"token {github_token}"}
     response = requests.get(url, headers=headers)
     print(response)
+
     if response.status_code == 200:
         content = base64.b64decode(response.json()['content'])
-        temp_dataset_path = f'{ap}/dataset/temp_{dataset_id}.parquet'
+        temp_dataset_path = f'{ap}/dataset/temp_{dataset_id}.csv'
+
         with open(temp_dataset_path, 'wb') as file:
             file.write(content)
+
         return temp_dataset_path
     else:
         raise HTTPException(status_code=response.status_code, detail="Dataset file not found on GitHub")
-
 
 
 def dynamic_import(script_content, test_size, model_id, dataset_content, target_column,features, github_token):
@@ -132,7 +135,7 @@ def train_model(request: TrainRequest, github_token: str = Depends(get_github_to
         plot_ids, metrics = dynamic_import(script_content, request.test_size, request.model_id, dataset_temp_path, request.target_column, request.features, github_token)
         
         #remove the dataset temp file
-        os.remove(f"{ap}/dataset/temp_{request.datafile_id}.parquet")
+        os.remove(f"{ap}/dataset/temp_{request.datafile_id}.csv")
         
         # Convert all numpy data types to native Python types for JSON serialization
         metrics = convert_numpy(metrics)
