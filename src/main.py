@@ -48,7 +48,7 @@ class PredictRequest(BaseModel):
 
 def get_github_token() -> str:
     """ Retrieve GitHub token from environment variables."""
-
+    print('token:' + os.getenv("GITHUB_TOKEN"))
     return os.getenv("GITHUB_TOKEN")
 
 
@@ -70,13 +70,15 @@ def fetch_model_save(model_id: str, github_token: str, model_type: str) -> str:
             f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{model_id}.keras",
             headers={"Authorization": f"token {github_token}"},
         )).status_code == 200):
-            return base64.b64decode(response.json()['content'])
+            response = requests.get(response.json()['download_url'])
+            return response.content
     else :
         if ((response := requests.get(
             f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{model_id}.pkl",
             headers={"Authorization": f"token {github_token}"},
         )).status_code == 200):
-            return base64.b64decode(response.json()['content'])
+            response = requests.get(response.json()['download_url'])
+            return response.content
 
     raise HTTPException(status_code=response.status_code, detail="Model file not found on GitHub")
 
@@ -102,7 +104,7 @@ def fetch_dataset(dataset_id: str, github_token: str) -> str:
         raise HTTPException(status_code=response.status_code, detail="Dataset file not found on GitHub")
 
 
-def dynamic_import(script_content, test_size, model_id, dataset_content, target_column,features, github_token, request_model_type):
+def dynamic_import(script_content, test_size, model_id, dataset_content, target_column,features, github_token, request_model_type, parameters):
     """ Dynamically import and execute training from the fetched script. """
     # Save the fetched script content to a temporary Python file
     # a modifier
@@ -112,7 +114,7 @@ def dynamic_import(script_content, test_size, model_id, dataset_content, target_
     save_model_path = f'{ap}/models/{model_id}.pkl'
 
     # Execute the training process
-    plot_ids, metrics, model_type = main("train",temp_script_path, dataset_content, target_column,features, test_size, model_id, request_model_type)
+    plot_ids, metrics, model_type = main("train",temp_script_path, dataset_content, target_column,features, test_size, model_id, request_model_type, parameters)
 
     if model_type == 'Tf':
         save_model_path = f'{ap}/models/{model_id}.keras'
@@ -144,7 +146,7 @@ def dynamic_import_predict(script_content, model_id, dataset_content,features, g
     with open(temp_script_path, 'wb') as file:
         file.write(script_content)
     # Execute the training process
-    result = main("predict",temp_script_path, dataset_content, None, features, None, model_id)
+    result = main("predict",temp_script_path, dataset_content, None, features, None, model_id, None, None)
 
     # # Clean up: Remove the temporary script file and plot files
     os.remove(temp_script_path)
@@ -229,7 +231,8 @@ def train_model(request: TrainRequest, github_token: str = Depends(get_github_to
             request.target_column, 
             request.features, 
             github_token,
-            request.model_type
+            request.model_type,
+            request.parameters
         )
         
         #remove the dataset temp file

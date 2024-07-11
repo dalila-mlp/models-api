@@ -129,7 +129,7 @@ def load_model_class(temp_script_path):
             return cls
     return None
 
-def main(type, temp_script_path, dataset_temp_path, target_column, features, test_size, model_id, request_model_type):
+def main(type, temp_script_path, dataset_temp_path, target_column, features, test_size, model_id, request_model_type, parameters):
     if type == 'train':
 
         # Step 1: Load the dataset with Polars
@@ -148,7 +148,8 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
         y_test_encoded = to_categorical(y_test, num_classes=num_classes)
 
         params = DynamicParams()
-        print(x.shape[1])
+        for param_name, param_value in parameters.items():
+            params.set_param(param_name, param_value)
         params.set_param("num_class", num_classes)
         params.set_param("input_shape", x.shape[1])
 
@@ -170,7 +171,7 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
                 trainer.save_model(model_id)
                 metrics = trainer.evaluate_classification(x_test, y_test_encoded, num_classes)
                 metrics = convert_numpy_to_list(metrics)
-                plot_ids = plot_metrics(history)
+                plot_ids = plot_and_log_metrics(metrics)
             elif request_model_type == "Regression":
                 trainer = ModelTrainer_Sk(model_instance)
                 history = trainer.train_regression(x_train, y_train)
