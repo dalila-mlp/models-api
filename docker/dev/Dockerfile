@@ -19,6 +19,7 @@ RUN pip install --upgrade pip && \
         polars \
         pyarrow \
         pandas \
+        xgboost \
     && pip install -e .
 
 EXPOSE 14506
