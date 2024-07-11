@@ -5,7 +5,8 @@ class DynamicParams:
         self.params = {
             # Common and Model-Specific Parameters
             'objective': 'multi:softmax',
-            'num_class': 3,
+            'epochs' : 100,
+            'num_class': 8,
             'learning_rate': 0.1,
             'max_depth': 5,
             'min_child_weight': 1,
@@ -13,8 +14,8 @@ class DynamicParams:
             'min_samples_split': 3,
             'min_samples_leaf': 3,
             'hidden_units': 64,
-            'num_hidden_layers': 2,
-            'input_shape': 4,
+            'num_hidden_layers': 5,
+            'input_shape': 2,
             'optimizer': 'Adam',
             'loss': 'CategoricalCrossentropy',
             'n_neighbors': 20,

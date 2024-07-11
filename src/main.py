@@ -65,7 +65,7 @@ def fetch_model_save(model_id: str, github_token: str, model_type: str) -> str:
     """ Fetch the model script from GitHub based on the model ID."""
     if model_type == 'Tf':
         if ((response := requests.get(
-            f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{model_id}",
+            f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{model_id}.keras",
             headers={"Authorization": f"token {github_token}"},
         )).status_code == 200):
             return base64.b64decode(response.json()['content'])
@@ -112,6 +112,11 @@ def dynamic_import(script_content, test_size, model_id, dataset_content, target_
     # Execute the training process
     plot_ids, metrics, model_type = main("train",temp_script_path, dataset_content, target_column,features, test_size, model_id)
 
+    if model_type == 'Tf':
+        save_model_path = f'{ap}/models/{model_id}.keras'
+    else :
+        save_model_path = f'{ap}/models/{model_id}.pkl'
+
     # Upload plots to GitHub
     for plot_id in plot_ids:
         plot_filename = f"{plot_id}.png"
@@ -127,10 +132,13 @@ def dynamic_import(script_content, test_size, model_id, dataset_content, target_
 
     return plot_ids, metrics, model_save_id, model_type
 
-def dynamic_import_predict(script_content, model_id, dataset_content,features, github_token):
+def dynamic_import_predict(script_content, model_id, dataset_content,features, github_token, model_type):
     """ Dynamically import and execute training from the fetched script. """
     # Save the fetched script content to a temporary Python file
-    temp_script_path = f'{ap}/models/temp_{model_id}'
+    if model_type == "Tf":
+        temp_script_path = f'{ap}/models/temp_{model_id}.keras'
+    else:
+        temp_script_path = f'{ap}/models/temp_{model_id}.pkl'
     with open(temp_script_path, 'wb') as file:
         file.write(script_content)
     # Execute the training process
@@ -162,8 +170,8 @@ def upload_model_to_github(model_id, model_type, github_token):
     file_name = f'{uuid.uuid4()}'
     try:
         if model_type == 'Tf':
-            file_path = f"{ap}/models/{model_id}"
-            url = f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{file_name}"
+            file_path = f"{ap}/models/{model_id}.keras"
+            url = f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{file_name}.keras"
         else:
             file_path = f"{ap}/models/{model_id}.pkl"
             url = f"https://api.github.com/repos/dalila-mlp/models-trained/contents/{file_name}.pkl"
@@ -233,7 +241,7 @@ def predict_model(request: PredictRequest, github_token: str = Depends(get_githu
     try:
         script_content = fetch_model_save(request.model_id, github_token, request.model_type)
         dataset_temp_path = fetch_dataset(request.datafile_id, github_token)
-        result = dynamic_import_predict(script_content, request.model_id, dataset_temp_path, request.features, github_token)
+        result = dynamic_import_predict(script_content, request.model_id, dataset_temp_path, request.features, github_token, request.model_type)
         #remove the dataset temp file
         os.remove(f"{ap}/dataset/temp_{request.datafile_id}.csv")
         

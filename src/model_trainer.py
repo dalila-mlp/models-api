@@ -13,17 +13,19 @@ class ModelTrainer_Tf:
 
     def validate_input_shape(self, x):
         expected_shape = self.classifier.model.input_shape
-        if x.shape[1:] != expected_shape[1:]:
-            raise ValueError(f"La dimension d'entrée {x.shape[1:]} n'est pas compatible avec la dimension attendue {expected_shape[1:]}")
+        # if x.shape[1:] != expected_shape[1:]:
+        #     raise ValueError(f"La dimension d'entrée {x.shape[1:]} n'est pas compatible avec la dimension attendue {expected_shape[1:]}")
 
-    def train(self, x_train, y_train, epochs=10, batch_size=32,  x_val=None, y_val=None):
+    def train(self, x_train, y_train, batch_size=32,  x_val=None, y_val=None):
         self.validate_input_shape(x_train)
         if x_val is not None and y_val is not None:
             self.validate_input_shape(x_val)
-            self.classifier.train(x_train, y_train, validation_data=(x_val, y_val), epochs=epochs,
+            history = self.classifier.train(x_train, y_train, validation_data=(x_val, y_val),
                                   batch_size=batch_size)
         else:
-            self.classifier.train(x_train, y_train, epochs=epochs, batch_size=batch_size)
+            history = self.classifier.train(x_train, y_train, batch_size=batch_size)
+        
+        return history
 
     def evaluate(self, x_test, y_test, num_classes):
         # Obtenez les prédictions du modèle
@@ -38,7 +40,7 @@ class ModelTrainer_Tf:
             'recall': recall_score(y_test_classes, y_pred_classes, average='weighted'),
             'f1_score': f1_score(y_test_classes, y_pred_classes, average='weighted'),
             'confusion_matrix': confusion_matrix(y_test_classes, y_pred_classes),
-            'roc_auc': roc_auc_score(y_test, y_pred_proba, average='weighted', multi_class='ovr'),
+            # 'roc_auc': roc_auc_score(y_test, y_pred_proba, average='weighted', multi_class='ovr'),
             'average_precision': average_precision_score(y_test, y_pred_proba, average='weighted'),
             'log_loss': log_loss(y_test, y_pred_proba),
             'categorical_crossentropy': CategoricalCrossentropy()(y_test, y_pred_proba).numpy(),
@@ -53,8 +55,9 @@ class ModelTrainer_Tf:
 
         return metrics
 
-    def save_model(self):
-        self.classifier.save()
+    def save_model(self, model_id):
+        file_name = f'models/{model_id}.keras'
+        self.classifier.save(file_name)     
 
     def load_model(self, filename):
         self.classifier.load(filename)

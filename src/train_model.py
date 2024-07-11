@@ -11,6 +11,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../mode
 
 from matplotlib import pyplot as plt
 import numpy as np
+import tensorflow as tf
 from src.model_trainer import ModelTrainer_Tf, ModelTrainer_Sk, ModelTrainer_other
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
@@ -46,6 +47,27 @@ def convert_numpy_to_list(metrics):
         if isinstance(value, np.ndarray):
             metrics[key] = value.tolist()
     return metrics
+
+def plot_metrics(history):
+    plot_ids = []
+    metrics = ['accuracy', 'loss']
+    plt.figure(figsize=(10, 6))
+
+    for n, metric in enumerate(metrics):
+        name = metric.replace("_", " ").capitalize()
+        plt.plot(history.epoch, history.history[metric], label='Train')
+        plt.xlabel('Epoch')
+        plt.ylabel(name)
+        plt.legend()
+
+        plot_id = str(uuid.uuid4())
+        plot_filename = f"{plot_id}.png"
+        plt.savefig(f"{ap}/charts/{plot_filename}")
+        plt.close()
+
+        plot_ids.append(plot_id)
+
+    return plot_ids
 
 def plot_and_log_metrics(metrics):
     plot_ids = []
@@ -126,6 +148,9 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
         y_test_tf = to_categorical(y_test, num_classes=num_classes)
 
         params = DynamicParams()
+        print(x.shape[1])
+        params.set_param("num_class", num_classes)
+        params.set_param("input_shape", x.shape[1])
 
         model_class = load_model_class(temp_script_path)
         model_instance = model_class(params)
@@ -143,12 +168,15 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
         else:
             trainer = ModelTrainer_other(model_instance)
 
-        trainer.train(x_train, y_train)
+        history = trainer.train(x_train, y_train)
         trainer.save_model(model_id)
         metrics = trainer.evaluate(x_test, y_test, num_classes)
         metrics = convert_numpy_to_list(metrics)
 
-        plot_ids = plot_and_log_metrics(metrics)
+        if model_type == "Tf":
+            plot_ids = plot_metrics(history)
+        else :
+            plot_ids = plot_and_log_metrics(metrics)
 
         return plot_ids, metrics, model_type
     else :
@@ -158,10 +186,15 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
         
         # Assuming 'target' is your label column and it's the last column
         x = df[features]
-        
-        with open(temp_script_path, 'rb') as file:
-            model = pickle.load(file)
-        result = model.predict(x)
+
+        if "keras" in temp_script_path:
+            model = tf.keras.models.load_model(temp_script_path)
+            result = model.predict(x)
+            result = np.argmax(result, axis=1)
+        else:
+            with open(temp_script_path, 'rb') as file:
+                model = pickle.load(file)
+                result = model.predict(x)
 
             # Convertir x_train en DataFrame polars
         if isinstance(x, pl.DataFrame):
