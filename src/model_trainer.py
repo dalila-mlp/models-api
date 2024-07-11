@@ -62,12 +62,10 @@ class ModelTrainer_Sk:
         self.classifier = classifier
 
     def validate_input_shape(self, x):
-        if hasattr(self.classifier, 'model') and hasattr(self.classifier.model, 'input_shape'):
-            expected_shape = self.classifier.model.input_shape
+        if hasattr(self.classifier, 'input_shape'):
+            expected_shape = self.classifier.input_shape
             if x.shape[1:] != expected_shape[1:]:
-                raise ValueError("La dimension d'entrée {x.shape[1:]} n'est pas compatible avec la dimension attendue {expected_shape[1:]}")
-            else:
-                print("Shape validation not applicable for non-Keras models")
+                raise ValueError(f"Input dimension {x.shape[1:]} is not compatible with expected dimension {expected_shape[1:]}")
 
     def train_classification(self, x_train, y_train, x_val=None, y_val=None):
         self.validate_input_shape(x_train)
@@ -82,18 +80,11 @@ class ModelTrainer_Sk:
         else:
             self.classifier.train(x_train, y_train)
 
-    def validate_input_shape(self, x):
-        if hasattr(self.classifier, 'input_shape'):
-            expected_shape = self.classifier.input_shape
-            if x.shape[1:] != expected_shape[1:]:
-                raise ValueError(f"Input dimension {x.shape[1:]} is not compatible with expected dimension {expected_shape[1:]}")
-
     def train_regression(self, x_train, y_train, x_val=None, y_val=None):
         self.validate_input_shape(x_train)
         self.classifier.train(x_train, y_train) 
         if x_val is not None and y_val is not None:
             self.validate_input_shape(x_val)
-
 
     def evaluate_classification(self, x_test, y_test, num_classes):
         y_pred = self.classifier.predict(x_test)

@@ -5,6 +5,8 @@ import os
 import inspect
 import pickle
 
+from sklearn.metrics import ConfusionMatrixDisplay
+
 # Add the current directory and the 'models' directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../models')))
@@ -13,7 +15,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import tensorflow as tf
 from src.model_trainer import ModelTrainer_Tf, ModelTrainer_Sk, ModelTrainer_other
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import learning_curve, train_test_split
 from tensorflow.keras.utils import to_categorical
 from src.classeAbstraite import DynamicParams
 import polars as pl
@@ -69,51 +71,65 @@ def plot_metrics(history):
 
     return plot_ids
 
-def plot_and_log_metrics(metrics):
+def plot_confusion_matrix(confusion_matrix, class_names):
     plot_ids = []
-    for metric, values in metrics.items():
-        if isinstance(values, np.ndarray) and values.ndim > 1:
-            # For matrices or high-dimensional data, we skip or handle separately
-            print(f"Skipping plotting for {metric} due to incompatible dimensions.")
-            continue
-        
-        plt.figure(figsize=(10, 6))
 
-        # Check if values are scalar or list/array-like
-        if np.isscalar(values):
-            # Plot scalar values as horizontal lines
-            plt.plot([0, 1], [values, values], label=f'{metric} (constant)')
-            plt.xlabel('Index')
-        elif isinstance(values, (list, np.ndarray)):
-            # Check dimensions and plot accordingly
-            values = np.array(values)
-            if values.ndim == 1:
-                epochs = range(len(values))
-                plt.plot(epochs, values, label=f'{metric} over epochs')
-            elif values.ndim == 2:
-                for i in range(values.shape[1]):
-                    epochs = range(values.shape[0])
-                    plt.plot(epochs, values[:, i], label=f'{metric} series {i}')
-            else:
-                print(f"Skipping {metric} due to unsupported number of dimensions: {values.ndim}")
-                continue
-        else:
-            print(f"Unhandled data type for metric {metric}: {type(values)}")
-            continue
+    confusion_matrix = np.array(confusion_matrix)  # Ensure it's a NumPy array
+    
+    # Determine the indices of the existing classes in the confusion matrix
+    existing_class_indices = np.where(confusion_matrix.sum(axis=1) + confusion_matrix.sum(axis=0) > 0)[0]
+    existing_class_names = [class_names[i] for i in existing_class_indices]
+    
+    # Filter the confusion matrix to include only the existing classes
+    filtered_confusion_matrix = confusion_matrix[np.ix_(existing_class_indices, existing_class_indices)]
 
-        plt.ylabel(metric)
-        plt.title(f'{metric.capitalize()} Metric')
-        plt.legend()
-        plt.grid(True)
+    plt.figure(figsize=(10, 8))
+    disp = ConfusionMatrixDisplay(confusion_matrix=filtered_confusion_matrix, display_labels=existing_class_names)
+    disp.plot(cmap=plt.cm.Blues)
+    plt.title('Matrice de Confusion')
+    
+    plot_id = str(uuid.uuid4())
+    plot_filename = f"{plot_id}.png"
+    plt.savefig(f"{ap}/charts/{plot_filename}")
+    plt.close()
+    plot_ids.append(plot_id)
+    return plot_ids
 
-        plot_id = str(uuid.uuid4())
-        plot_filename = f"{plot_id}.png"
-        plt.savefig(f"{ap}/charts/{plot_filename}")
-        plt.close()
+def plot_regression(metrics, model,X_test, y_test):
+    plot_ids = []
 
-        plot_ids.append(plot_id)
+    # 1. Plot Regression Metrics as horizontal bars
+    plt.figure(figsize=(10, 6))
+    metric_names = list(metrics.keys())
+    values = list(metrics.values())
+    plt.barh(metric_names, values, color='skyblue')
+    plt.xlabel('Metric Values')
+    plt.title('Regression Metrics Overview')
+    plot_id = str(uuid.uuid4())
+    plot_filename = f"{plot_id}.png"
+    plt.savefig(f"{ap}/charts/{plot_filename}")
+    plt.close()
+    plot_ids.append(plot_id)
+
+    # 2. Predicted vs. Actual Plot
+    predictions = model.predict(X_test)
+    plt.figure(figsize=(10, 6))
+    plt.scatter(y_test, predictions, alpha=0.5, label='Predicted vs Actual')
+    plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'k--', lw=2, label='Perfect Fit')
+    plt.xlabel('Actual Values')
+    plt.ylabel('Predictions')
+    plt.title('Predicted vs Actual Values')
+    plt.legend()
+    plot_id = str(uuid.uuid4())
+    plot_filename = f"{plot_id}.png"
+    plt.savefig(f"{ap}/charts/{plot_filename}")
+    plt.close()
+    plot_ids.append(plot_id)
 
     return plot_ids
+
+
+
 
 def load_model_class(temp_script_path):
     spec = importlib.util.spec_from_file_location("model", temp_script_path)
@@ -138,6 +154,10 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
         # Assuming 'target' is your label column and it's the last column
         x = df[features]
         y = df.select(target_column).to_numpy().flatten()  # Converting to NumPy for compatibility with sklearn
+
+        # Determine unique class names from y, if categorical
+        if request_model_type == "Classification":
+            class_names = np.unique(y).astype(str)  # Convert class labels to string if necessary
 
         # Step 2: Split the data using sklearn (Polars can be used if the entire workflow stays in Polars)
         x_train, x_test, y_train, y_test = train_test_split(x.to_pandas(), y, test_size=test_size, random_state=42)
@@ -170,14 +190,14 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
                 trainer.save_model(model_id)
                 metrics = trainer.evaluate_classification(x_test, y_test_encoded, num_classes)
                 metrics = convert_numpy_to_list(metrics)
-                plot_ids = plot_metrics(history)
+                plot_ids = plot_confusion_matrix(metrics['confusion_matrix'], class_names)
             elif request_model_type == "Regression":
                 trainer = ModelTrainer_Sk(model_instance)
                 history = trainer.train_regression(x_train, y_train)
                 trainer.save_model(model_id)
                 metrics = trainer.evaluate_regression(x_test, y_test)
                 metrics = convert_numpy_to_list(metrics)
-                plot_ids = plot_and_log_metrics(metrics)
+                plot_ids = plot_regression(metrics,model_instance,x_test,y_test)
             else :
                 raise Exception('Model type not defined')
         else:
