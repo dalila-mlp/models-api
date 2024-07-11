@@ -1,5 +1,6 @@
 .env
 **/__pycache__
 models/**.py
+models/**.pkl
 charts/**.png
 dataset/**.csv

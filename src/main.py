@@ -37,6 +37,7 @@ class TrainRequest(BaseModel):
     features : List[str]
     test_size: float
     model_type: str
+    parameters: dict
 
 class PredictRequest(BaseModel):
     model_id: str
@@ -214,6 +215,8 @@ def convert_numpy(obj):
 def train_model(request: TrainRequest, github_token: str = Depends(get_github_token)):
     if not github_token:
         raise HTTPException(status_code=500, detail="GitHub token not configured")
+
+    print(request.parameters)
 
     try:
         script_content = fetch_model_script(request.model_id, github_token)
