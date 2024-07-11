@@ -36,6 +36,7 @@ class TrainRequest(BaseModel):
     target_column: str
     features : List[str]
     test_size: float
+    model_type: str
 
 class PredictRequest(BaseModel):
     model_id: str
@@ -100,7 +101,7 @@ def fetch_dataset(dataset_id: str, github_token: str) -> str:
         raise HTTPException(status_code=response.status_code, detail="Dataset file not found on GitHub")
 
 
-def dynamic_import(script_content, test_size, model_id, dataset_content, target_column,features, github_token):
+def dynamic_import(script_content, test_size, model_id, dataset_content, target_column,features, github_token, request_model_type):
     """ Dynamically import and execute training from the fetched script. """
     # Save the fetched script content to a temporary Python file
     # a modifier
@@ -110,7 +111,7 @@ def dynamic_import(script_content, test_size, model_id, dataset_content, target_
     save_model_path = f'{ap}/models/{model_id}.pkl'
 
     # Execute the training process
-    plot_ids, metrics, model_type = main("train",temp_script_path, dataset_content, target_column,features, test_size, model_id)
+    plot_ids, metrics, model_type = main("train",temp_script_path, dataset_content, target_column,features, test_size, model_id, request_model_type)
 
     if model_type == 'Tf':
         save_model_path = f'{ap}/models/{model_id}.keras'
@@ -217,7 +218,16 @@ def train_model(request: TrainRequest, github_token: str = Depends(get_github_to
     try:
         script_content = fetch_model_script(request.model_id, github_token)
         dataset_temp_path = fetch_dataset(request.datafile_id, github_token)
-        plot_ids, metrics, model_save_id, model_type = dynamic_import(script_content, request.test_size, request.model_id, dataset_temp_path, request.target_column, request.features, github_token)
+        plot_ids, metrics, model_save_id, response_model_type = dynamic_import(
+            script_content,
+            request.test_size,
+            request.model_id,
+            dataset_temp_path,
+            request.target_column, 
+            request.features, 
+            github_token,
+            request.model_type
+        )
         
         #remove the dataset temp file
         os.remove(f"{ap}/dataset/temp_{request.datafile_id}.csv")
@@ -228,7 +238,7 @@ def train_model(request: TrainRequest, github_token: str = Depends(get_github_to
             "metrics": metrics,
             "plot_id_list": plot_ids,
             "model_save_id": model_save_id,
-            "model_type": model_type,
+            "model_type": response_model_type,
         }
     except HTTPException as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)

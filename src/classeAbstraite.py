@@ -33,7 +33,7 @@ class DynamicParams:
             'pool_size': 32,
             'num_conv_layers': 2,
             'input_shape_CNN': (64, 64, 1),
-            'n_iter': 300,
+            'max_iter': 300,
             'tol': 1e-03,
             'alpha_1': 1e-06,
             'alpha_2': 1e-06,

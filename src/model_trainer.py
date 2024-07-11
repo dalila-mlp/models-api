@@ -2,8 +2,7 @@ import numpy as np
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'models-draft')))
-from src.classeAbstraite import DynamicParams
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score, roc_curve, precision_recall_curve, average_precision_score, log_loss, jaccard_score, cohen_kappa_score, matthews_corrcoef
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score, average_precision_score, log_loss, jaccard_score, cohen_kappa_score, matthews_corrcoef, mean_squared_error, mean_absolute_error, r2_score
 from tensorflow.keras.losses import CategoricalCrossentropy
 
 
@@ -49,10 +48,6 @@ class ModelTrainer_Tf:
             'matthews_corrcoef': matthews_corrcoef(y_test_classes, y_pred_classes)
         }
 
-        '''# Calcul des courbes ROC et PR
-        metrics['roc_curve'] = roc_curve(y_test.ravel(), y_pred_proba.ravel())
-        metrics['precision_recall_curve'] = precision_recall_curve(y_test.ravel(), y_pred_proba.ravel())'''
-
         return metrics
 
     def save_model(self, model_id):
@@ -74,7 +69,7 @@ class ModelTrainer_Sk:
             else:
                 print("Shape validation not applicable for non-Keras models")
 
-    def train(self, x_train, y_train, x_val=None, y_val=None):
+    def train_classification(self, x_train, y_train, x_val=None, y_val=None):
         self.validate_input_shape(x_train)
 
         y_train = np.argmax(y_train, axis=1)
@@ -87,7 +82,20 @@ class ModelTrainer_Sk:
         else:
             self.classifier.train(x_train, y_train)
 
-    def evaluate(self, x_test, y_test, num_classes):
+    def validate_input_shape(self, x):
+        if hasattr(self.classifier, 'input_shape'):
+            expected_shape = self.classifier.input_shape
+            if x.shape[1:] != expected_shape[1:]:
+                raise ValueError(f"Input dimension {x.shape[1:]} is not compatible with expected dimension {expected_shape[1:]}")
+
+    def train_regression(self, x_train, y_train, x_val=None, y_val=None):
+        self.validate_input_shape(x_train)
+        self.classifier.train(x_train, y_train) 
+        if x_val is not None and y_val is not None:
+            self.validate_input_shape(x_val)
+
+
+    def evaluate_classification(self, x_test, y_test, num_classes):
         y_pred = self.classifier.predict(x_test)
 
         # Handle the shape of y_pred_proba
@@ -130,6 +138,25 @@ class ModelTrainer_Sk:
 
         return metrics
 
+    def evaluate_regression(self, x_test, y_test):
+        # Get predictions
+        y_pred = self.classifier.predict(x_test)
+
+        # Compute regression metrics
+        mse = mean_squared_error(y_test, y_pred)
+        rmse = mean_squared_error(y_test, y_pred, squared=False)  # RMSE
+        mae = mean_absolute_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)  # Coefficient of determination
+
+        # Collecting all metrics in a dictionary
+        metrics = {
+            'mean_squared_error': mse,
+            'root_mean_squared_error': rmse,
+            'mean_absolute_error': mae,
+            'r2_score': r2
+        }
+
+        return metrics
 
     def save_model(self, model_id):
         file_name = f'models/{model_id}.pkl'

@@ -129,7 +129,7 @@ def load_model_class(temp_script_path):
             return cls
     return None
 
-def main(type, temp_script_path, dataset_temp_path, target_column, features, test_size, model_id):
+def main(type, temp_script_path, dataset_temp_path, target_column, features, test_size, model_id, request_model_type):
     if type == 'train':
 
         # Step 1: Load the dataset with Polars
@@ -144,8 +144,8 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
         
         y = y.astype(int)
         num_classes = np.max(y) + 1
-        y_train_tf = to_categorical(y_train, num_classes=num_classes)
-        y_test_tf = to_categorical(y_test, num_classes=num_classes)
+        y_train_encoded = to_categorical(y_train, num_classes=num_classes)
+        y_test_encoded = to_categorical(y_test, num_classes=num_classes)
 
         params = DynamicParams()
         print(x.shape[1])
@@ -154,32 +154,42 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
 
         model_class = load_model_class(temp_script_path)
         model_instance = model_class(params)
+        response_model_type = determine_model_type_from_imports(temp_script_path)
 
-        model_type = determine_model_type_from_imports(temp_script_path)
-
-        if model_type == "Tf":
+        if response_model_type == "Tf":
             trainer = ModelTrainer_Tf(model_instance)
-            y_train = y_train_tf
-            y_test = y_test_tf
-        elif model_type == "Sk":
-            trainer = ModelTrainer_Sk(model_instance)
-            y_train = y_train_tf
-            y_test = y_test_tf
+            history = trainer.train(x_train, y_train_encoded)
+            trainer.save_model(model_id)
+            metrics = trainer.evaluate(x_test, y_test_encoded, num_classes)
+            metrics = convert_numpy_to_list(metrics)
+            plot_ids = plot_metrics(history)
+        elif response_model_type == "Sk":
+            if request_model_type == "Classification":
+                trainer = ModelTrainer_Sk(model_instance)
+                history = trainer.train_classification(x_train, y_train_encoded)
+                trainer.save_model(model_id)
+                metrics = trainer.evaluate_classification(x_test, y_test_encoded, num_classes)
+                metrics = convert_numpy_to_list(metrics)
+                plot_ids = plot_metrics(history)
+            elif request_model_type == "Regression":
+                trainer = ModelTrainer_Sk(model_instance)
+                history = trainer.train_regression(x_train, y_train)
+                trainer.save_model(model_id)
+                metrics = trainer.evaluate_regression(x_test, y_test)
+                metrics = convert_numpy_to_list(metrics)
+                plot_ids = plot_and_log_metrics(metrics)
+            else :
+                raise Exception('Model type not defined')
         else:
             trainer = ModelTrainer_other(model_instance)
-
-        history = trainer.train(x_train, y_train)
-        trainer.save_model(model_id)
-        metrics = trainer.evaluate(x_test, y_test, num_classes)
-        metrics = convert_numpy_to_list(metrics)
-
-        if model_type == "Tf":
+            history = trainer.train(x_train, y_train)
+            trainer.save_model(model_id)
+            metrics = trainer.evaluate(x_test, y_test, num_classes)
+            metrics = convert_numpy_to_list(metrics)
             plot_ids = plot_metrics(history)
-        else :
-            plot_ids = plot_and_log_metrics(metrics)
 
-        return plot_ids, metrics, model_type
-    else :
+        return plot_ids, metrics, response_model_type
+    else:
 
         # Step 1: Load the dataset with Polars
         df = pl.read_csv(dataset_temp_path)
