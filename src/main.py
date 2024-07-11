@@ -48,7 +48,6 @@ class PredictRequest(BaseModel):
 
 def get_github_token() -> str:
     """ Retrieve GitHub token from environment variables."""
-    print('token:' + os.getenv("GITHUB_TOKEN"))
     return os.getenv("GITHUB_TOKEN")
 
 
@@ -90,7 +89,6 @@ def fetch_dataset(dataset_id: str, github_token: str) -> str:
     url = f"https://api.github.com/repos/dalila-mlp/datafiles/contents/{dataset_id}.csv"
     headers = {"Authorization": f"token {github_token}"}
     response = requests.get(url, headers=headers)
-    print(response)
 
     if response.status_code == 200:
         content = base64.b64decode(response.json()['content'])
@@ -217,8 +215,6 @@ def convert_numpy(obj):
 def train_model(request: TrainRequest, github_token: str = Depends(get_github_token)):
     if not github_token:
         raise HTTPException(status_code=500, detail="GitHub token not configured")
-
-    print(request.parameters)
 
     try:
         script_content = fetch_model_script(request.model_id, github_token)
