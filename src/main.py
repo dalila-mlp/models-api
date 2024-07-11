@@ -125,7 +125,7 @@ def dynamic_import(script_content, test_size, model_id, dataset_content, target_
         os.remove(plot_filename)
     os.remove(save_model_path)
 
-    return plot_ids, metrics, model_save_id
+    return plot_ids, metrics, model_save_id, model_type
 
 def dynamic_import_predict(script_content, model_id, dataset_content,features, github_token):
     """ Dynamically import and execute training from the fetched script. """
@@ -209,7 +209,7 @@ def train_model(request: TrainRequest, github_token: str = Depends(get_github_to
     try:
         script_content = fetch_model_script(request.model_id, github_token)
         dataset_temp_path = fetch_dataset(request.datafile_id, github_token)
-        plot_ids, metrics, model_save_id = dynamic_import(script_content, request.test_size, request.model_id, dataset_temp_path, request.target_column, request.features, github_token)
+        plot_ids, metrics, model_save_id, model_type = dynamic_import(script_content, request.test_size, request.model_id, dataset_temp_path, request.target_column, request.features, github_token)
         
         #remove the dataset temp file
         os.remove(f"{ap}/dataset/temp_{request.datafile_id}.csv")
@@ -219,7 +219,8 @@ def train_model(request: TrainRequest, github_token: str = Depends(get_github_to
         return {
             "metrics": metrics,
             "plot_id_list": plot_ids,
-            "model_save_id": model_save_id
+            "model_save_id": model_save_id,
+            "model_type": model_type,
         }
     except HTTPException as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
@@ -233,7 +234,6 @@ def predict_model(request: PredictRequest, github_token: str = Depends(get_githu
         script_content = fetch_model_save(request.model_id, github_token, request.model_type)
         dataset_temp_path = fetch_dataset(request.datafile_id, github_token)
         result = dynamic_import_predict(script_content, request.model_id, dataset_temp_path, request.features, github_token)
-        result = json.dumps(result, indent=2)
         #remove the dataset temp file
         os.remove(f"{ap}/dataset/temp_{request.datafile_id}.csv")
         

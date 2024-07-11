@@ -3,6 +3,7 @@ import json
 class DynamicParams:
     def __init__(self):
         self.params = {
+            # Common and Model-Specific Parameters
             'objective': 'multi:softmax',
             'num_class': 3,
             'learning_rate': 0.1,
@@ -22,15 +23,30 @@ class DynamicParams:
             'trainable_base_layers': 10,
             'C': 1.0,
             'max_iter': 10,
-            "solver": "liblinear",
-            "n_estimators": 10,
-            "kernel": "linear",
-            "gamma": "auto",
-            "conv_filters": 64,
-            "kernel_size": 64,
-            "pool_size": 32,
-            "num_conv_layers": 2,
-            'input_shape_CNN': (64, 64, 1)
+            'solver': 'liblinear',
+            'n_estimators': 10,
+            'kernel': 'linear',
+            'gamma': 'auto',
+            'conv_filters': 64,
+            'kernel_size': 64,
+            'pool_size': 32,
+            'num_conv_layers': 2,
+            'input_shape_CNN': (64, 64, 1),
+            'n_iter': 300,
+            'tol': 1e-3,
+            'alpha_1': 1e-6,
+            'alpha_2': 1e-6,
+            'lambda_1': 1e-6,
+            'lambda_2': 1e-6,
+            'compute_score': False,
+            'fit_intercept': True,
+            'normalize': False,
+            'copy_X': True,
+            'verbose': False,
+            'alpha': 1.0,
+            'l1_ratio': 0.5,
+            'degree': 2,
+            'max_features': None,
         }
 
     def get_param(self, key):
