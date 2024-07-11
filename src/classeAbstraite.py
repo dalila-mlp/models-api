@@ -24,7 +24,7 @@ class DynamicParams:
             'trainable_base_layers': 10,
             'C': 1.0,
             'max_iter': 10,
-            'solver': 'liblinear',
+            'solver': 'auto',
             'n_estimators': 10,
             'kernel': 'linear',
             'gamma': 'auto',
