@@ -166,36 +166,52 @@ class ModelTrainer_other:
         else:
             self.classifier.train(x_train, y_train)
 
-    def evaluate(self, x_test, y_test):
-        # Obtenez les prédictions du modèle
+    def evaluate_classification(self, x_test, y_test, num_classes):
         y_pred = self.classifier.predict(x_test)
-        y_pred_classes = np.argmax(y_pred, axis=1)
-        y_pred_proba = np.eye(3)[y_pred_classes]
-        y_test_classes = np.argmax(y_test, axis=1)
 
+        # Handle the shape of y_pred_proba
+        if y_pred.ndim == 1:
+            y_pred_proba = np.zeros((y_pred.shape[0], num_classes))
+            y_pred_proba[np.arange(y_pred.shape[0]), y_pred] = 1
+        else:
+            y_pred_proba = y_pred
+
+        # Convert y_test to class indices if it's one-hot encoded
+        y_test_classes = np.argmax(y_test, axis=1) if y_test.ndim > 1 else y_test
+
+        # Basic metrics
         metrics = {
-            'accuracy': accuracy_score(y_test_classes, y_pred_classes),
-            'precision': precision_score(y_test_classes, y_pred_classes, average='weighted'),
-            'recall': recall_score(y_test_classes, y_pred_classes, average='weighted'),
-            'f1_score': f1_score(y_test_classes, y_pred_classes, average='weighted'),
-            'confusion_matrix': confusion_matrix(y_test_classes, y_pred_classes),
-            'roc_auc': roc_auc_score(y_test, y_pred_proba, average='weighted', multi_class='ovr'),
-            'average_precision': average_precision_score(y_test, y_pred_proba, average='weighted'),
-            'log_loss': log_loss(y_test, y_pred_proba),
-            'categorical_crossentropy': CategoricalCrossentropy()(y_test, y_pred_proba).numpy(),
-            'jaccard_index': jaccard_score(y_test_classes, y_pred_classes, average='weighted'),
-            'cohen_kappa': cohen_kappa_score(y_test_classes, y_pred_classes),
-            'matthews_corrcoef': matthews_corrcoef(y_test_classes, y_pred_classes)
+            'accuracy': accuracy_score(y_test_classes, y_pred),
+            'precision': precision_score(y_test_classes, y_pred, average='weighted', zero_division=0),
+            'recall': recall_score(y_test_classes, y_pred, average='weighted'),
+            'f1_score': f1_score(y_test_classes, y_pred, average='weighted'),
+            'confusion_matrix': confusion_matrix(y_test_classes, y_pred),
         }
 
-        '''# Calcul des courbes ROC et PR
-        metrics['roc_curve'] = roc_curve(y_test.ravel(), y_pred_proba.ravel())
-        metrics['precision_recall_curve'] = precision_recall_curve(y_test.ravel(), y_pred_proba.ravel())'''
+        # Debug information
+        print("Unique classes in y_test_classes:", np.unique(y_test_classes))
+        print("Unique classes in y_pred:", np.unique(y_pred))
+
+        unique_test_classes = np.unique(y_test_classes)
+        unique_pred_classes = np.unique(y_pred)
+
+        if len(unique_test_classes) > 1 and len(unique_pred_classes) > 1:
+            try:
+                # Calculate additional metrics only if more than one class is present
+                metrics['roc_auc'] = roc_auc_score(y_test, y_pred_proba, average='weighted', multi_class='ovr')
+                metrics['average_precision'] = average_precision_score(y_test, y_pred_proba, average='weighted')
+                metrics['log_loss'] = log_loss(y_test, y_pred_proba)
+            except ValueError as e:
+                print(f"Error calculating additional metrics: {e}")
+                print("Skipping these metrics due to error.")
+        else:
+            print("ROC AUC and other metrics requiring multiple classes not calculated due to insufficient class presence in either y_test or y_pred.")
 
         return metrics
 
-    def save_model(self):
-        self.classifier.save()
+    def save_model(self, model_id):
+        file_name = f'models/{model_id}.pkl'
+        self.classifier.save(file_name)
 
     def load_model(self, filename):
         self.classifier.load(filename)

@@ -161,7 +161,6 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
 
         # Step 2: Split the data using sklearn (Polars can be used if the entire workflow stays in Polars)
         x_train, x_test, y_train, y_test = train_test_split(x.to_pandas(), y, test_size=test_size, random_state=42)
-        
         y = y.astype(int)
         num_classes = np.max(y) + 1
         y_train_encoded = to_categorical(y_train, num_classes=num_classes)
@@ -205,9 +204,9 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
             trainer = ModelTrainer_other(model_instance)
             history = trainer.train(x_train, y_train)
             trainer.save_model(model_id)
-            metrics = trainer.evaluate(x_test, y_test, num_classes)
+            metrics = trainer.evaluate_classification(x_test, y_test, num_classes)
             metrics = convert_numpy_to_list(metrics)
-            plot_ids = plot_metrics(history)
+            plot_ids = plot_confusion_matrix(metrics['confusion_matrix'], class_names)
 
         return plot_ids, metrics, response_model_type
     else:
@@ -217,6 +216,7 @@ def main(type, temp_script_path, dataset_temp_path, target_column, features, tes
         
         # Assuming 'target' is your label column and it's the last column
         x = df[features]
+        x = x.to_pandas()
 
         if "keras" in temp_script_path:
             model = tf.keras.models.load_model(temp_script_path)

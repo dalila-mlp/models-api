@@ -91,11 +91,11 @@ def fetch_dataset(dataset_id: str, github_token: str) -> str:
     response = requests.get(url, headers=headers)
 
     if response.status_code == 200:
-        content = base64.b64decode(response.json()['content'])
+        response = requests.get(response.json()['download_url'])
         temp_dataset_path = f'{ap}/dataset/temp_{dataset_id}.csv'
 
         with open(temp_dataset_path, 'wb') as file:
-            file.write(content)
+            file.write(response.content)
 
         return temp_dataset_path
     else:
